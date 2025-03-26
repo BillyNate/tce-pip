@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+from importlib.util import find_spec
+from logging import getLogger
+
+_LOGGER = getLogger(__name__)
+
+if len(sys.argv) <= 1:
+  print("No arguments given")
+  exit()
+
+cmd = sys.argv[1]
+tcepipdir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(tcepipdir + "/../lib/tce-pip")
+
+dependencies = ["pip", "pkginfo", "packaging"]
+missing_dependencies = [dep for dep in dependencies if find_spec(dep) is None]
+
+if missing_dependencies:
+  question = "Missing " + ", ".join(missing_dependencies) + ". Do you want to install now?"
+  answer = input("%s (y/N) " % question).lower() == 'y'
+
+  if not answer:
+    print("Cannot continue without these packages")
+    exit()
+  else:
+    from shutil import rmtree
+    from tcepip import create_package, install_package
+    
+    with open(tcepipdir + "/../lib/tce-pip/package.sample.info", "r") as infofile:
+      infofilecontent = infofile.read()
+    
+    reload_required = False
+
+    if "pip" in missing_dependencies:
+      import ensurepip
+
+      print("Attempting to install pip...")
+
+      # suppress script location warning:
+      os.environ["PATH"] = "/tmp/ensurepip/usr/local/bin:" + os.environ["PATH"]
+
+      ensurepip.bootstrap(root="/tmp/ensurepip/", default_pip=True)
+
+      create_package("/tmp/ensurepip" + sys.exec_prefix.removesuffix("/usr/local"), "/etc/sysconfig/tcedir/optional/tce-pip-pip.tcz")
+      install_package("tce-pip-pip.tcz");
+        
+      rmtree("/tmp/ensurepip")
+      missing_dependencies.remove("pip")
+      reload_required = True
+
+    if len(missing_dependencies) > 0:
+      import glob
+      from tcepip import piprun
+      import uuid
+
+      piprun(False, ["download", "--disable-pip-version-check", "-d", "/tmp/tce-pip-deps/packages"] + missing_dependencies)
+      packages = glob.glob("/tmp/tce-pip-deps/packages/*.whl") + glob.glob("/tmp/tce-pip-deps/packages/*.tar.gz")
+      piprun(False, ["install", "--disable-pip-version-check", "--target=/tmp/tce-pip-deps/installed"] + packages)
+      sys.path.append("/tmp/tce-pip-deps/installed")
+
+      from tcepip import prepare_package
+
+      repodir = "/etc/sysconfig/tcedir/optional"
+      installdir = "/tmp/tce-pip-" + uuid.uuid4().hex + "/installdir"
+
+      for deppkg in packages:
+        prepare_package(deppkg, repodir, installdir, infofilecontent)
+        
+        deps = [dep for dep in missing_dependencies if deppkg.removeprefix("/tmp/tce-pip-deps/packages/").startswith(dep)]
+        if deps:
+          install_package("tce-pip-" + deps[0] + ".tcz")
+
+      sys.path.remove("/tmp/tce-pip-deps/installed")
+      rmtree("/tmp/tce-pip-deps")
+
+    # Create dep file:
+    with open("/etc/sysconfig/tcedir/optional/tce-pip.tcz.dep", "a") as depfile:
+      depfile.write("tce-pip-pip.tcz\ntce-pip-packaging.tcz\ntce-pip-pkginfo.tcz")
+    
+    if reload_required:
+      print("Please restart tce-pip for changes to take effect")
+      exit()
+
+if cmd == "install" or cmd == "upgrade":
+  import glob
+  from http.server import HTTPServer, SimpleHTTPRequestHandler
+  from importlib.metadata import version
+  from io import StringIO
+  from packaging.version import Version
+  import pkginfo
+  import re
+  from shutil import rmtree
+  import site
+  from subprocess import getoutput
+  from tcepip import install_package, prepare_package, piprun
+  import threading
+  import uuid
+
+  # Command script for getting the Tiny Core version and build:
+  tcverandbuild_cmd = '''
+  . /etc/init.d/tc-functions
+  useBusybox
+  echo "$(getMajorVer).x/$(getBuild)"
+  '''
+
+  tcverandbuild = getoutput(tcverandbuild_cmd).strip()
+  randomdirname = uuid.uuid4().hex
+  tmpdir = "/tmp/tce-pip-" + randomdirname
+  repodir = tmpdir + "/pkgdir/" + tcverandbuild + "/tcz"
+  installdir = tmpdir + "/installdir"
+
+  with open(tcepipdir + "/../lib/tce-pip/package.sample.info", "r") as infofile:
+    infofilecontent = infofile.read()
+
+  os.makedirs(repodir, exist_ok=True)
+
+  if cmd == "upgrade":
+    outdated, piperrors = piprun(True, ["list", "-o", "--disable-pip-version-check"])
+
+  # Set extension repo to local:
+  with open("/opt/tcemirror", "r+") as tcemirrorfile:
+    mirrorfilecontent = tcemirrorfile.read()
+    tcemirrorfile.seek(0)
+    tcemirrorfile.write("http://127.0.0.1:8000/")
+    tcemirrorfile.truncate()
+
+  # Start http server:
+  httpd = HTTPServer(("", 8000), lambda *_: SimpleHTTPRequestHandler(*_, directory=(tmpdir + "/pkgdir")))
+  thread = threading.Thread(None, httpd.serve_forever)
+  thread.start()
+
+  for pkg in sys.argv[2:]:
+    pkgn = re.sub(r"[-_.]+", "-", pkg).lower()
+    if cmd == "upgrade":
+      if re.search(r"^" + re.escape(pkgn) + r"\s", outdated, re.MULTILINE) is None:
+        print("No need to update " + pkg)
+        exit()
+
+    print("Downloading packages for " + pkg + "...")
+    piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, pkgn])
+    print("Downloaded packages for " + pkg + " to " + tmpdir)
+
+    for deppkg in (glob.glob(tmpdir + "/*.whl") + glob.glob(tmpdir + "/*.tar.gz")):
+      metadata = pkginfo.get_metadata(deppkg)
+      pkgname = re.sub(r"[-_.]+", "-", metadata.name).lower()
+
+      # Check if dependency is already satisfied:      
+      if pkgn != pkgname and find_spec(pkgname) is not None:
+        if Version(version(pkgname)) >= Version(metadata.version):
+          print(pkgname + " already installed, skipping packaging")
+          continue
+
+      prepare_package(deppkg, repodir, installdir, infofilecontent)
+      
+    print("Installing " + pkgn + " and dependencies as Tiny Core packages")
+    install_package("tce-pip-" + pkgn, True)
+
+    print("Installed " + pkgn)
+    rmtree(repodir)
+    os.makedirs(repodir)
+
+  httpd.shutdown()
+  thread.join()
+
+  with open("/opt/tcemirror", "w") as tcemirrorfile:
+    tcemirrorfile.write(mirrorfilecontent)
+
+  exit()

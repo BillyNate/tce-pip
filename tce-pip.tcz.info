@@ -1,0 +1,9 @@
+Title:          TCE-PIP
+Description:    Python Pip wrapper for Tiny Core Linux
+Version:        0.1
+Author:         BillyNate
+Original-site:  github.com/BillyNate/tce-pip
+Copying-policy: MIT
+Size:           100KB
+Extension_by:   BillyNate
+Tags:           CLI

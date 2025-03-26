@@ -1,0 +1,8 @@
+Title:          %title
+Description:    %description
+Version:        %version
+Author:         %author
+Original-site:  %site
+Copying-policy: %policy
+Size:           %size
+Extension_by:   tce-pip
