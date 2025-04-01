@@ -10,14 +10,19 @@ And thus `TCE-PIP` was born&hellip;
 ### Installation
 1. Make sure you have Python installed
 2. Install dependencies: `tce-load -wi squashfs-tools`
-3. Run `wget -P /etc/sysconfig/tcedir/optional https://github.com/BillyNate/tce-pip/releases/latest/download/tce-pip.tcz && tce-load -i tce-pip.tcz && echo "tce-pip.tcz" >> onboot.lst`
+3. Run `wget -P /etc/sysconfig/tcedir/optional https://github.com/BillyNate/tce-pip/releases/latest/download/tce-pip.tcz && tce-load -i tce-pip.tcz && echo "tce-pip.tcz" >> /etc/sysconfig/tcedir/onboot.lst`
 4. Run `tce-pip install` once to install pip and other necessary packages
 
 ### Usage
 To install a Pip package, run `tce-pip install packagename`.
 
 ### What does is actually do?
-
+`tce-pip` downloads the pip package including dependencies using a simple `pip download` into a temporary directory  
+All pip packages are installed into their own temporary directory and needed metadata is extracted  
+The pip packages are packaged up into seperate tc packages with their metadata  
+The system's tcemirror is set to localhost and an http server is started  
+The requested package gets installed with its dependencies  
+The tcemirror is restored to its old setting  
 
 ### Tips
 Using Piwheel as a source for the Python packages will significantly speed up installation.
