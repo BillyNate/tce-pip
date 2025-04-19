@@ -28,10 +28,10 @@ if missing_dependencies:
   else:
     from shutil import rmtree
     from tcepip import create_package, install_package
-    
+
     with open(tcepipdir + "/../lib/tce-pip/package.sample.info", "r") as infofile:
       infofilecontent = infofile.read()
-    
+
     reload_required = False
 
     if "pip" in missing_dependencies:
@@ -46,7 +46,7 @@ if missing_dependencies:
 
       create_package("/tmp/ensurepip" + sys.exec_prefix.removesuffix("/usr/local"), "/etc/sysconfig/tcedir/optional/tce-pip-pip.tcz")
       install_package("tce-pip-pip.tcz");
-        
+
       rmtree("/tmp/ensurepip")
       missing_dependencies.remove("pip")
       reload_required = True
@@ -68,7 +68,7 @@ if missing_dependencies:
 
       for deppkg in packages:
         prepare_package(deppkg, repodir, installdir, infofilecontent)
-        
+
         deps = [dep for dep in missing_dependencies if deppkg.removeprefix("/tmp/tce-pip-deps/packages/").startswith(dep)]
         if deps:
           install_package("tce-pip-" + deps[0] + ".tcz")
@@ -79,7 +79,7 @@ if missing_dependencies:
     # Create dep file:
     with open("/etc/sysconfig/tcedir/optional/tce-pip.tcz.dep", "a") as depfile:
       depfile.write("tce-pip-pip.tcz\ntce-pip-packaging.tcz\ntce-pip-pkginfo.tcz")
-    
+
     if reload_required:
       print("Please restart tce-pip for changes to take effect")
       exit()
