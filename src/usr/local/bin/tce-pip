@@ -91,10 +91,10 @@ if cmd == "install" or cmd == "upgrade":
   from io import StringIO
   from packaging.version import Version
   from pkginfo import get_metadata
-  from re import escape, MULTILINE, search, split
+  from re import escape, MULTILINE, search
   from shutil import rmtree
   from subprocess import getoutput
-  from tcepip import install_package, prepare_package, piprun, sanitize_packagename
+  from tcepip import install_package, package_version_check, prepare_package, piprun, sanitize_packagename
   from threading import Thread
   from uuid import uuid4
 
@@ -132,20 +132,24 @@ if cmd == "install" or cmd == "upgrade":
   thread.start()
 
   for package in sys.argv[2:]:
-    splitted_package = split(r"(\=\=\=|~\=|\=\=|<\=|>\=|!\=|<|>)", package)
-    version = ['', '']
-    if len(splitted_package) > 1:
-      version = splitted_package[2], splitted_package[1]
-    package = splitted_package[0]
-    sane_packagename = sanitize_packagename(package)
-    install_packagename = sane_packagename
+    packagename = package
+    packageversion = package_version_check(package)
+    if 'version' in packageversion:
+      packagename = packageversion['name']
+
+    sane_packagename = sanitize_packagename(packagename)
+
+    full_sane_packagename = sane_packagename
+    if 'version' in packageversion:
+      full_sane_packagename = sane_packagename + packageversion['delimiter'] + packageversion['version']
+
     if cmd == "upgrade":
       if search(r"^" + escape(sane_packagename) + r"\s", outdated, MULTILINE) is None:
         print("No need to update " + package)
         exit()
 
     print("Downloading packages for " + package + "...")
-    piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, sane_packagename + version[1] + version[0]])
+    piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, full_sane_packagename])
     print("Downloaded packages for " + package + " to " + tmpdir)
 
     dep_packages = glob(tmpdir + "/*.whl") + glob(tmpdir + "/*.tar.gz")

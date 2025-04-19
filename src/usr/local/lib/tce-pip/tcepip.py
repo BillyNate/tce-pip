@@ -8,7 +8,7 @@ from importlib.util import find_spec
 from io import StringIO
 from logging import getLogger
 from math import log
-from re import match, sub
+from re import match, split, sub
 from shutil import rmtree
 from site import getsitepackages
 from subprocess import PIPE, Popen
@@ -31,6 +31,12 @@ env = os.environ.copy()
 
 def sanitize_packagename(packagename):
   return sub(r"[-_.]+", "-", packagename).lower()
+
+def package_version_check(packagename):
+  splitted_packagename = split(r"(\=\=\=|~\=|\=\=|<\=|>\=|!\=|<|>)", packagename)
+  if len(splitted_packagename) > 1:
+    return { 'name': splitted_packagename[0], 'version': splitted_packagename[2], 'delimiter': splitted_packagename[1] }
+  return { 'name': packagename }
 
 def req_filter(req):
   from packaging.version import Version
