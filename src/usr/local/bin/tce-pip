@@ -95,7 +95,7 @@ if cmd == "install" or cmd == "upgrade":
   from shutil import rmtree
   import site
   from subprocess import getoutput
-  from tcepip import install_package, prepare_package, piprun
+  from tcepip import install_package, prepare_package, piprun, sanitize_packagename
   import threading
   import uuid
 
@@ -132,33 +132,45 @@ if cmd == "install" or cmd == "upgrade":
   thread = threading.Thread(None, httpd.serve_forever)
   thread.start()
 
-  for pkg in sys.argv[2:]:
-    pkgn = re.sub(r"[-_.]+", "-", pkg).lower()
+  for package in sys.argv[2:]:
+    splitted_package = re.split(r"(\=\=\=|~\=|\=\=|<\=|>\=|!\=|<|>)", package)
+    version = ['', '']
+    if len(splitted_package) > 1:
+      version = splitted_package[2], splitted_package[1]
+    package = splitted_package[0]
+    sane_packagename = sanitize_packagename(package)
+    install_packagename = sane_packagename
     if cmd == "upgrade":
-      if re.search(r"^" + re.escape(pkgn) + r"\s", outdated, re.MULTILINE) is None:
-        print("No need to update " + pkg)
+      if re.search(r"^" + re.escape(sane_packagename) + r"\s", outdated, re.MULTILINE) is None:
+        print("No need to update " + package)
         exit()
 
-    print("Downloading packages for " + pkg + "...")
-    piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, pkgn])
-    print("Downloaded packages for " + pkg + " to " + tmpdir)
+    print("Downloading packages for " + package + "...")
+    piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, sane_packagename + version[1] + version[0]])
+    print("Downloaded packages for " + package + " to " + tmpdir)
 
-    for deppkg in (glob.glob(tmpdir + "/*.whl") + glob.glob(tmpdir + "/*.tar.gz")):
-      metadata = pkginfo.get_metadata(deppkg)
-      pkgname = re.sub(r"[-_.]+", "-", metadata.name).lower()
+    dep_packages = glob.glob(tmpdir + "/*.whl") + glob.glob(tmpdir + "/*.tar.gz")
 
-      # Check if dependency is already satisfied:      
-      if pkgn != pkgname and find_spec(pkgname) is not None:
-        if Version(version(pkgname)) >= Version(metadata.version):
-          print(pkgname + " already installed, skipping packaging")
+    # For some reason setuptools calls itself my-test-package, causing a mismatch when installing the package. Here's a bandaid:
+    if len(dep_packages) == 1:
+      sane_packagename = sanitize_packagename(pkginfo.get_metadata(dep_packages[0]).name)
+
+    for dep_package in dep_packages:
+      metadata = pkginfo.get_metadata(dep_package)
+      sane_dep_packagename = sanitize_packagename(metadata.name)
+
+      # Check if dependency is already satisfied:
+      if sane_dep_packagename != sane_packagename and find_spec(sane_dep_packagename) is not None:
+        if Version(version(sane_dep_packagename)) >= Version(metadata.version):
+          print(sane_dep_packagename + " already installed, skipping packaging")
           continue
 
-      prepare_package(deppkg, repodir, installdir, infofilecontent)
-      
-    print("Installing " + pkgn + " and dependencies as Tiny Core packages")
-    install_package("tce-pip-" + pkgn, True)
+      prepare_package(dep_package, repodir, installdir, infofilecontent)
 
-    print("Installed " + pkgn)
+    print("Installing " + package + " and dependencies as Tiny Core packages")
+    install_package("tce-pip-" + sane_packagename, True)
+
+    print("Installed " + package)
     rmtree(repodir)
     os.makedirs(repodir)
 

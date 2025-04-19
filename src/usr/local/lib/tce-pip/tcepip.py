@@ -29,6 +29,9 @@ extra = ""
 # Prepare env for later use
 env = os.environ.copy()
 
+def sanitize_packagename(packagename):
+  return sub(r"[-_.]+", "-", packagename).lower()
+
 def req_filter(req):
   from packaging.version import Version
 
@@ -46,7 +49,7 @@ def req_naming(req):
     req = req.split(";", 1)[0].strip()
   req = req.strip().lower()
   req = match(r"[A-Za-z0-9+_-]+", req).group(0)
-  req = sub(r"[-_.]+", "-", req)
+  req = sanitize_packagename(req)
   return "tce-pip-" + req  + ".tcz"
 
 def pretty_size(n,pow=0,b=1024,u='B',pre=['']+[p for p in'KMGTPEZY']):
@@ -119,7 +122,7 @@ def prepare_package(deppkg, repodir, installdir, infocontent):
 
   env = os.environ.copy()
   metadata = get_metadata(deppkg)
-  pkgname = sub(r"[-_.]+", "-", metadata.name).lower()
+  pkgname = sanitize_packagename(metadata.name)
   tczfile = repodir + "/tce-pip-" + pkgname + ".tcz"
 
   # Don't touch pip:
@@ -133,7 +136,7 @@ def prepare_package(deppkg, repodir, installdir, infocontent):
     requirements.remove("tce-pip-pip.tcz")
   #print(requirements)
   if requirements:
-    depsfile = open(repodir + "/tce-pip-" + sub(r"[-_.]+", "-", metadata.name).lower() + ".tcz.dep", "a+")
+    depsfile = open(repodir + "/tce-pip-" + sanitize_packagename(metadata.name) + ".tcz.dep", "a+")
     depsfile.write("\n".join(requirements))
     depsfile.close()
 
@@ -143,7 +146,7 @@ def prepare_package(deppkg, repodir, installdir, infocontent):
   os.remove(deppkg)
 
   # Create package from installdir:
-  print("Packaging into Tiny Core package...")
+  print("Packaging " + pkgname + " into Tiny Core package...")
   create_package(installdir, tczfile)
 
   pkgsize = pretty_size(os.stat(tczfile).st_size)
