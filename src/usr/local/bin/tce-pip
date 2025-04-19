@@ -52,19 +52,19 @@ if missing_dependencies:
       reload_required = True
 
     if len(missing_dependencies) > 0:
-      import glob
+      from glob import glob
       from tcepip import piprun
-      import uuid
+      from uuid import uuid4
 
       piprun(False, ["download", "--disable-pip-version-check", "-d", "/tmp/tce-pip-deps/packages"] + missing_dependencies)
-      packages = glob.glob("/tmp/tce-pip-deps/packages/*.whl") + glob.glob("/tmp/tce-pip-deps/packages/*.tar.gz")
+      packages = glob("/tmp/tce-pip-deps/packages/*.whl") + glob("/tmp/tce-pip-deps/packages/*.tar.gz")
       piprun(False, ["install", "--disable-pip-version-check", "--target=/tmp/tce-pip-deps/installed"] + packages)
       sys.path.append("/tmp/tce-pip-deps/installed")
 
       from tcepip import prepare_package
 
       repodir = "/etc/sysconfig/tcedir/optional"
-      installdir = "/tmp/tce-pip-" + uuid.uuid4().hex + "/installdir"
+      installdir = "/tmp/tce-pip-" + uuid4().hex + "/installdir"
 
       for deppkg in packages:
         prepare_package(deppkg, repodir, installdir, infofilecontent)
@@ -85,19 +85,18 @@ if missing_dependencies:
       exit()
 
 if cmd == "install" or cmd == "upgrade":
-  import glob
+  from glob import glob
   from http.server import HTTPServer, SimpleHTTPRequestHandler
   from importlib.metadata import version
   from io import StringIO
   from packaging.version import Version
-  import pkginfo
-  import re
+  from pkginfo import get_metadata
+  from re import escape, MULTILINE, search, split
   from shutil import rmtree
-  import site
   from subprocess import getoutput
   from tcepip import install_package, prepare_package, piprun, sanitize_packagename
-  import threading
-  import uuid
+  from threading import Thread
+  from uuid import uuid4
 
   # Command script for getting the Tiny Core version and build:
   tcverandbuild_cmd = '''
@@ -107,7 +106,7 @@ if cmd == "install" or cmd == "upgrade":
   '''
 
   tcverandbuild = getoutput(tcverandbuild_cmd).strip()
-  randomdirname = uuid.uuid4().hex
+  randomdirname = uuid4().hex
   tmpdir = "/tmp/tce-pip-" + randomdirname
   repodir = tmpdir + "/pkgdir/" + tcverandbuild + "/tcz"
   installdir = tmpdir + "/installdir"
@@ -129,11 +128,11 @@ if cmd == "install" or cmd == "upgrade":
 
   # Start http server:
   httpd = HTTPServer(("", 8000), lambda *_: SimpleHTTPRequestHandler(*_, directory=(tmpdir + "/pkgdir")))
-  thread = threading.Thread(None, httpd.serve_forever)
+  thread = Thread(None, httpd.serve_forever)
   thread.start()
 
   for package in sys.argv[2:]:
-    splitted_package = re.split(r"(\=\=\=|~\=|\=\=|<\=|>\=|!\=|<|>)", package)
+    splitted_package = split(r"(\=\=\=|~\=|\=\=|<\=|>\=|!\=|<|>)", package)
     version = ['', '']
     if len(splitted_package) > 1:
       version = splitted_package[2], splitted_package[1]
@@ -141,7 +140,7 @@ if cmd == "install" or cmd == "upgrade":
     sane_packagename = sanitize_packagename(package)
     install_packagename = sane_packagename
     if cmd == "upgrade":
-      if re.search(r"^" + re.escape(sane_packagename) + r"\s", outdated, re.MULTILINE) is None:
+      if search(r"^" + escape(sane_packagename) + r"\s", outdated, MULTILINE) is None:
         print("No need to update " + package)
         exit()
 
@@ -149,14 +148,14 @@ if cmd == "install" or cmd == "upgrade":
     piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, sane_packagename + version[1] + version[0]])
     print("Downloaded packages for " + package + " to " + tmpdir)
 
-    dep_packages = glob.glob(tmpdir + "/*.whl") + glob.glob(tmpdir + "/*.tar.gz")
+    dep_packages = glob(tmpdir + "/*.whl") + glob(tmpdir + "/*.tar.gz")
 
     # For some reason setuptools calls itself my-test-package, causing a mismatch when installing the package. Here's a bandaid:
     if len(dep_packages) == 1:
-      sane_packagename = sanitize_packagename(pkginfo.get_metadata(dep_packages[0]).name)
+      sane_packagename = sanitize_packagename(get_metadata(dep_packages[0]).name)
 
     for dep_package in dep_packages:
-      metadata = pkginfo.get_metadata(dep_package)
+      metadata = get_metadata(dep_package)
       sane_dep_packagename = sanitize_packagename(metadata.name)
 
       # Check if dependency is already satisfied:
