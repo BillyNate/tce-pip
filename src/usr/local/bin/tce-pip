@@ -89,6 +89,7 @@ if cmd == "install" or cmd == "upgrade":
   from http.server import HTTPServer, SimpleHTTPRequestHandler
   from importlib.metadata import version
   from io import StringIO
+  from json import load
   from packaging.version import Version
   from pkginfo import get_metadata
   from re import escape, MULTILINE, search
@@ -115,6 +116,8 @@ if cmd == "install" or cmd == "upgrade":
     infofilecontent = infofile.read()
 
   os.makedirs(repodir, exist_ok=True)
+  
+  os.environ["PIP_IGNORE_INSTALLED"] = "0"
 
   if cmd == "upgrade":
     outdated, piperrors = piprun(True, ["list", "-o", "--disable-pip-version-check"])
@@ -126,8 +129,15 @@ if cmd == "install" or cmd == "upgrade":
     tcemirrorfile.write("http://127.0.0.1:8000/")
     tcemirrorfile.truncate()
 
+  # Because TinyCore even downloads already installed packages, we need a way to fallback for installed dependencies:
+  class HTTPRequestHandler(SimpleHTTPRequestHandler):
+    def do_GET(self):
+      if not os.path.isfile(self.directory + self.path) and os.path.isfile("/etc/sysconfig/tcedir/optional/" + os.path.basename(self.path)):
+        os.symlink("/etc/sysconfig/tcedir/optional/" + os.path.basename(self.path), self.directory + self.path)
+      return SimpleHTTPRequestHandler.do_GET(self)
+
   # Start http server:
-  httpd = HTTPServer(("", 8000), lambda *_: SimpleHTTPRequestHandler(*_, directory=(tmpdir + "/pkgdir")))
+  httpd = HTTPServer(("", 8000), lambda *_: HTTPRequestHandler(*_, directory=(tmpdir + "/pkgdir")))
   thread = Thread(None, httpd.serve_forever)
   thread.start()
 
@@ -148,8 +158,16 @@ if cmd == "install" or cmd == "upgrade":
         print("No need to update " + package)
         exit()
 
+    download_packages = []
     print("Downloading packages for " + package + "...")
-    piprun(False, ["download", "--disable-pip-version-check", "-d", tmpdir, full_sane_packagename])
+    # First dry-run an install cmd, because the download cmd doesn't check for already installed packages:
+    piprun(False, ["install", "--disable-pip-version-check", "--dry-run", "--prefix=" + tmpdir, "--report=" + tmpdir + "/report.json", full_sane_packagename])
+    # Read JSON report, use packages to perform "download" command...
+    with open(tmpdir + "/report.json", "r") as reportfile:
+      report = load(reportfile)
+      for installpkg in report["install"]:
+        download_packages.append(installpkg["metadata"]["name"] + "==" + installpkg["metadata"]["version"])
+    piprun(False, ["download", "--disable-pip-version-check", "--verbose", "--no-deps", "-d", tmpdir] + download_packages)
     print("Downloaded packages for " + package + " to " + tmpdir)
 
     dep_packages = glob(tmpdir + "/*.whl") + glob(tmpdir + "/*.tar.gz")
