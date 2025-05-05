@@ -147,7 +147,7 @@ def prepare_package(deppkg, repodir, installdir, infocontent):
     depsfile.close()
 
   # Install pip package in our own install dir:
-  out, err = piprun(False, ["install", "--disable-pip-version-check", "--no-compile", "--no-deps", "--ignore-installed", "--target=" + installdir + getsitepackages()[0], deppkg])
+  out, err = piprun(False, ["install", "--no-compile", "--no-deps", "--ignore-installed", "--target=" + installdir + getsitepackages()[0], deppkg])
   # Remove no longer needed wheel file:
   os.remove(deppkg)
 

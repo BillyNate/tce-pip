@@ -15,6 +15,12 @@ cmd = sys.argv[1]
 tcepipdir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(tcepipdir + "/../lib/tce-pip")
 
+# Set environment variables as need by TCE-PIP, but only if not yet set by the user:
+if "PIP_DISABLE_PIP_VERSION_CHECK" not in os.environ:
+  os.environ["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+if "PIP_IGNORE_INSTALLED" not in os.environ:
+  os.environ["PIP_IGNORE_INSTALLED"] = "0"
+
 dependencies = ["pip", "pkginfo", "packaging"]
 missing_dependencies = [dep for dep in dependencies if find_spec(dep) is None]
 
@@ -56,9 +62,9 @@ if missing_dependencies:
       from tcepip import piprun
       from uuid import uuid4
 
-      piprun(False, ["download", "--disable-pip-version-check", "-d", "/tmp/tce-pip-deps/packages"] + missing_dependencies)
+      piprun(False, ["download", "-d", "/tmp/tce-pip-deps/packages"] + missing_dependencies)
       packages = glob("/tmp/tce-pip-deps/packages/*.whl") + glob("/tmp/tce-pip-deps/packages/*.tar.gz")
-      piprun(False, ["install", "--disable-pip-version-check", "--target=/tmp/tce-pip-deps/installed"] + packages)
+      piprun(False, ["install", "--target=/tmp/tce-pip-deps/installed"] + packages)
       sys.path.append("/tmp/tce-pip-deps/installed")
 
       from tcepip import prepare_package
@@ -116,11 +122,9 @@ if cmd == "install" or cmd == "upgrade":
     infofilecontent = infofile.read()
 
   os.makedirs(repodir, exist_ok=True)
-  
-  os.environ["PIP_IGNORE_INSTALLED"] = "0"
 
   if cmd == "upgrade":
-    outdated, piperrors = piprun(True, ["list", "-o", "--disable-pip-version-check"])
+    outdated, piperrors = piprun(True, ["list", "-o"])
 
   # Set extension repo to local:
   with open("/opt/tcemirror", "r+") as tcemirrorfile:
@@ -161,13 +165,13 @@ if cmd == "install" or cmd == "upgrade":
     download_packages = []
     print("Downloading packages for " + package + "...")
     # First dry-run an install cmd, because the download cmd doesn't check for already installed packages:
-    piprun(False, ["install", "--disable-pip-version-check", "--dry-run", "--prefix=" + tmpdir, "--report=" + tmpdir + "/report.json", full_sane_packagename])
+    piprun(False, ["install", "--dry-run", "--prefix=" + tmpdir, "--report=" + tmpdir + "/report.json", full_sane_packagename])
     # Read JSON report, use packages to perform "download" command...
     with open(tmpdir + "/report.json", "r") as reportfile:
       report = load(reportfile)
       for installpkg in report["install"]:
         download_packages.append(installpkg["metadata"]["name"] + "==" + installpkg["metadata"]["version"])
-    piprun(False, ["download", "--disable-pip-version-check", "--verbose", "--no-deps", "-d", tmpdir] + download_packages)
+    piprun(False, ["download", "--no-deps", "-d", tmpdir] + download_packages)
     print("Downloaded packages for " + package + " to " + tmpdir)
 
     dep_packages = glob(tmpdir + "/*.whl") + glob(tmpdir + "/*.tar.gz")
