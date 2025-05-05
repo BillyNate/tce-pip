@@ -2,6 +2,7 @@
 
 import os
 import sys
+import tempfile
 from importlib.util import find_spec
 from logging import getLogger
 
@@ -13,6 +14,7 @@ if len(sys.argv) <= 1:
 
 cmd = sys.argv[1]
 tcepipdir = os.path.dirname(os.path.abspath(__file__))
+ostmpdir = tempfile.gettempdir()
 sys.path.append(tcepipdir + "/../lib/tce-pip")
 
 # Set environment variables as need by TCE-PIP, but only if not yet set by the user:
@@ -42,18 +44,20 @@ if missing_dependencies:
 
     if "pip" in missing_dependencies:
       import ensurepip
+      
+      ensurepipdir = ostmpdir + "/ensurepip"
 
       print("Attempting to install pip...")
 
       # suppress script location warning:
-      os.environ["PATH"] = "/tmp/ensurepip/usr/local/bin:" + os.environ["PATH"]
+      os.environ["PATH"] = ensurepipdir + "/usr/local/bin:" + os.environ["PATH"]
 
-      ensurepip.bootstrap(root="/tmp/ensurepip/", default_pip=True)
+      ensurepip.bootstrap(root=ensurepipdir, default_pip=True)
 
-      create_package("/tmp/ensurepip" + sys.exec_prefix.removesuffix("/usr/local"), "/etc/sysconfig/tcedir/optional/tce-pip-pip.tcz")
+      create_package(ensurepipdir + sys.exec_prefix.removesuffix("/usr/local"), "/etc/sysconfig/tcedir/optional/tce-pip-pip.tcz")
       install_package("tce-pip-pip.tcz");
 
-      rmtree("/tmp/ensurepip")
+      rmtree(ensurepipdir)
       missing_dependencies.remove("pip")
       reload_required = True
 
@@ -61,26 +65,28 @@ if missing_dependencies:
       from glob import glob
       from tcepip import piprun
       from uuid import uuid4
+      
+      tcepipdepsdir = ostmpdir + "/tce-pip-deps"
 
-      piprun(False, ["download", "-d", "/tmp/tce-pip-deps/packages"] + missing_dependencies)
-      packages = glob("/tmp/tce-pip-deps/packages/*.whl") + glob("/tmp/tce-pip-deps/packages/*.tar.gz")
-      piprun(False, ["install", "--target=/tmp/tce-pip-deps/installed"] + packages)
-      sys.path.append("/tmp/tce-pip-deps/installed")
+      piprun(False, ["download", "-d", tcepipdepsdir + "/packages"] + missing_dependencies)
+      packages = glob(tcepipdepsdir + "/packages/*.whl") + glob(tcepipdepsdir + "/packages/*.tar.gz")
+      piprun(False, ["install", "--target=" + tcepipdepsdir + "/installed"] + packages)
+      sys.path.append(tcepipdepsdir + "/installed")
 
       from tcepip import prepare_package
 
       repodir = "/etc/sysconfig/tcedir/optional"
-      installdir = "/tmp/tce-pip-" + uuid4().hex + "/installdir"
+      installdir = ostmpdir + "/tce-pip-" + uuid4().hex + "/installdir"
 
       for deppkg in packages:
         prepare_package(deppkg, repodir, installdir, infofilecontent)
 
-        deps = [dep for dep in missing_dependencies if deppkg.removeprefix("/tmp/tce-pip-deps/packages/").startswith(dep)]
+        deps = [dep for dep in missing_dependencies if deppkg.removeprefix(tcepipdepsdir + "/packages/").startswith(dep)]
         if deps:
           install_package("tce-pip-" + deps[0] + ".tcz")
 
-      sys.path.remove("/tmp/tce-pip-deps/installed")
-      rmtree("/tmp/tce-pip-deps")
+      sys.path.remove(tcepipdepsdir + "/installed")
+      rmtree(tcepipdepsdir)
 
     # Create dep file:
     with open("/etc/sysconfig/tcedir/optional/tce-pip.tcz.dep", "a") as depfile:
@@ -114,7 +120,7 @@ if cmd == "install" or cmd == "upgrade":
 
   tcverandbuild = getoutput(tcverandbuild_cmd).strip()
   randomdirname = uuid4().hex
-  tmpdir = "/tmp/tce-pip-" + randomdirname
+  tmpdir = ostmpdir + "/tce-pip-" + randomdirname
   repodir = tmpdir + "/pkgdir/" + tcverandbuild + "/tcz"
   installdir = tmpdir + "/installdir"
 
