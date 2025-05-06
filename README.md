@@ -34,9 +34,10 @@ Using Piwheel as a source for the Python packages will significantly speed up in
    ```
 3. If your Python version doesn't match [piwheel's support](//www.piwheels.org#support), add these lines to use wheels for an older Python version:
    ```
-   python-version=311
-   only-binary=:all:
-   target=/home/tc/.local/lib/python3.13/site-packages
+   ignore-requires-python=yes
    ```
-   Make sure path in `target=` matches your Python version. The target path is now identical to a `--user` install.
-4. Save changes: `backup`
+4. Optionally add:
+   ```
+   prefer-binary=yes
+   ```
+5. Save changes: `backup`
