@@ -14,7 +14,10 @@ And thus `TCE-PIP` was born&hellip;
 4. Run `tce-pip install` once to install pip and other necessary packages
 
 ### Usage
-To install a Pip package, run `tce-pip install packagename`.
+To install a Pip package, run `tce-pip install packagename`.  
+For more control, environment variables can be set. For example `export PIP_VERBOSE=1; tce-pip install packagename` will run the pip commands with verbose output.  
+Sometimes the packages with all its dependencies are too big to fit into TinyCore's RAM, while there's enough space on the persistent partition.  
+Setting these variables might help out: `export TMPDIR=/mnt/mmcblk0p2/tmp;` and `export PIP_CACHE_DIR=/mnt/mmcblk0p2/tmp/cache;`.  
 
 ### What does is actually do?
 `tce-pip` downloads the pip package including dependencies using a simple `pip download` into a temporary directory  
