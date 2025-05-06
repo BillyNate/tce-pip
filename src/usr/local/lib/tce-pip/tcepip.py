@@ -45,7 +45,7 @@ def req_filter(req):
     delimit = req.split(";", 1)[1]
     if "python_version" in delimit:
       delimit = delimit.replace("python_version", "Version(python_version)")
-      delimit = sub(r"(['\"][\d\.]+['\"])", "Version(\\1)", delimit, 1)
+      delimit = sub(r"(['\"][\d\.]+['\"])", "Version(\\1)", delimit, 0)
     if not eval(delimit.strip()):
       return False
   return True
